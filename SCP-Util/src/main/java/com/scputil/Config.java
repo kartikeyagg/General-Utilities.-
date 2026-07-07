@@ -67,11 +67,12 @@ public class Config {
      */
     public String mode;
 
-    /** SCP executable. Defaults to {@code scp} (openssh) or {@code pscp} (putty). */
+    /**
+     * SCP executable override. When blank it defaults, via
+     * {@link #resolvedScpCommand()}, to {@code scp} (OpenSSH) or {@code pscp}
+     * (PuTTY) based on the effective mode.
+     */
     public String scpCommand;
-
-    /** SSH executable used for {@code mkdir -p}. Defaults to {@code ssh} or {@code plink}. */
-    public String sshCommand;
 
     /**
      * When true, non-interactive/batch flags are added so a run fails fast
@@ -113,6 +114,17 @@ public class Config {
     }
 
     /**
+     * The SCP executable to run: the explicit {@link #scpCommand} if set,
+     * otherwise the default for the effective mode ({@code scp} / {@code pscp}).
+     * Resolved lazily so a runtime mode change (e.g. the UI route toggle) picks
+     * the right default without reloading the config.
+     */
+    public String resolvedScpCommand() {
+        if (!isBlank(scpCommand)) return scpCommand.trim();
+        return effectiveMode() == Mode.OPENSSH ? "scp" : "pscp";
+    }
+
+    /**
      * The scp/ssh destination for the current mode: an alias in OpenSSH mode,
      * or {@code username@remoteIp} in PuTTY mode.
      */
@@ -123,9 +135,8 @@ public class Config {
     }
 
     private void applyDefaults() {
-        Mode m = effectiveMode();
-        if (isBlank(scpCommand)) scpCommand = (m == Mode.OPENSSH) ? "scp" : "pscp";
-        if (isBlank(sshCommand)) sshCommand = (m == Mode.OPENSSH) ? "ssh" : "plink";
+        // The scp executable is resolved lazily in resolvedScpCommand() so a
+        // runtime route change picks the right default. Only normalize port here.
         if (port < 0) port = 0;
     }
 

@@ -1,18 +1,20 @@
 {
-  "_comment_openssh": "Use this style if you connect with 'ssh <alias>' / 'scp <alias>:...' (OpenSSH + ~/.ssh/config, key-based auth). remoteHost is your alias exactly as you type it.",
+  "_comment_route": "The app has a Route toggle (OpenSSH / PuTTY). 'mode' seeds its initial position: 'openssh' or 'putty'. Leave blank to infer from remoteHost.",
+  "_comment_remote": "The tool never inspects or creates anything on the remote — the mirror folder (and any sub-folders you use) must already exist there.",
+
+  "_comment_openssh": "OpenSSH route: connect like 'ssh <alias>' / 'scp <alias>:...' (key-based auth via ~/.ssh/config). Set remoteHost to that alias.",
   "localFolder": "C:\\Users\\me\\Dir1",
   "mirrorFolder": "/home/ubuntu/Dir1",
   "remoteHost": "myserver",
 
-  "_comment_putty": "Alternative: leave remoteHost empty and fill these to use PuTTY pscp/plink with a password.",
+  "_comment_putty": "PuTTY route: leave remoteHost empty and fill these to use pscp with a password.",
   "remoteIp": "",
   "username": "",
   "password": "",
 
-  "_comment_optional": "port=0 means 'let ssh/alias decide'. mode can force 'openssh' or 'putty'. scpCommand/sshCommand default to scp/ssh (openssh) or pscp/plink (putty).",
+  "_comment_optional": "port=0 means 'let ssh/alias decide'. scpCommand overrides the executable (defaults to scp or pscp per route).",
   "port": 0,
   "mode": "",
   "scpCommand": "",
-  "sshCommand": "",
   "batchMode": true
 }

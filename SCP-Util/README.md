@@ -25,14 +25,21 @@ local and remote folders share the same name (e.g. `...\Dir1` ->
 ## How it works
 
 - **`config.json`** (next to the program) holds the local folder, mirror folder,
-  remote IP, username and password.
+  and connection details for the chosen route.
 - **`lastrun.json`** (next to the program) stores the timestamp of the last
-  successful run. Any file whose last-modified time is newer than that is
-  copied. On the very first run (no `lastrun.json`) every file is copied.
+  successful sync. Any file whose last-modified time is newer than that is
+  copied. On the very first run (no `lastrun.json`) every file is copied. All of
+  this is decided **locally** — the remote is never queried for timestamps.
 - The last-run marker only advances when **all** files copy successfully, so a
   failed file is retried on the next click.
-- Sub-directory structure is preserved on the remote; missing remote folders are
-  created with `mkdir -p` before each copy.
+- **The remote is never inspected or modified apart from the copy itself** — no
+  `mkdir`, no listing, no status checks. The tool knows only the target folder
+  path. Because of that, **the remote mirror folder (and any sub-folders you use)
+  must already exist**. A file whose remote sub-folder is missing is reported
+  `[FAILED]` and retried next run; local sub-directory structure is otherwise
+  preserved in the destination path.
+- **Route toggle:** the window has an *OpenSSH (scp)* / *PuTTY (pscp)* selector.
+  It is seeded from `mode` in `config.json` and overrides it for that run.
 
 ### Dependencies
 
@@ -42,8 +49,10 @@ local and remote folders share the same name (e.g. `...\Dir1` ->
 ## The SCP transport
 
 Java has no built-in SCP and (per the spec) Gson is the only library, so the
-tool shells out to the system `ssh`/`scp` (or PuTTY) to do the transfer. There
-are two modes; the mode is inferred from your config (or forced with `mode`).
+tool shells out to the system `scp` (or PuTTY's `pscp`) to do the transfer — and
+nothing else; there is no separate `ssh`/`plink` step. You pick the route with
+the in-window toggle; `mode` in the config seeds its initial position (otherwise
+it is inferred: OpenSSH when `remoteHost` is set, else PuTTY).
 
 ### Mode 1 — OpenSSH with a host alias (recommended)
 
@@ -61,24 +70,23 @@ password is placed on the command line.**
 }
 ```
 
-This resolves to commands like:
+Each modified file resolves to a single command like:
 
 ```
-ssh -o BatchMode=yes myserver "mkdir -p '/home/ubuntu/Dir1/sub'"
 scp -o BatchMode=yes C:\...\file.txt myserver:/home/ubuntu/Dir1/sub/file.txt
 ```
 
-Requirements: Windows 10/11 built-in OpenSSH (`where ssh` / `where scp`), and the
-alias must authenticate **without an interactive prompt** (key auth), because a
-GUI app can't type a password. `BatchMode=yes` makes it fail fast if keys aren't
-set up rather than hang.
+Requirements: Windows 10/11 built-in OpenSSH (`where scp`), the remote mirror
+folder tree already present, and the alias must authenticate **without an
+interactive prompt** (key auth), because a GUI app can't type a password.
+`BatchMode=yes` makes it fail fast if keys aren't set up rather than hang.
 
 ### Mode 2 — PuTTY with a password
 
 Leave `remoteHost` empty and provide `remoteIp` + `username` + `password`. The
-tool uses PuTTY's `pscp`/`plink` with `-pw`. Install PuTTY and make sure `pscp`
-and `plink` are on your `PATH`. First connect once interactively so the host key
-is cached (batch mode won't accept a new host key).
+tool uses PuTTY's `pscp` with `-pw`. Install PuTTY and make sure `pscp` is on
+your `PATH`. First connect once interactively (e.g. with `pscp`/PuTTY) so the
+host key is cached — batch mode won't accept a new host key.
 
 ```json
 {
@@ -102,10 +110,9 @@ Copy `config.example.json` to `config.json` (same directory as the jar).
 | `remoteIp`     | Remote host IP/hostname (Mode 2).                                       |
 | `username`     | SSH username (Mode 2).                                                  |
 | `password`     | SSH password (Mode 2 only).                                             |
-| `port`         | SSH port. `0`/omitted = let ssh / the alias config decide.             |
-| `mode`         | Force `"openssh"` or `"putty"` (optional; otherwise inferred).          |
+| `port`         | SSH port. `0`/omitted = let scp / the alias config decide.            |
+| `mode`         | Seeds the route toggle: `"openssh"` or `"putty"` (optional; otherwise inferred). |
 | `scpCommand`   | SCP executable (optional; defaults to `scp` or `pscp`).               |
-| `sshCommand`   | SSH executable for `mkdir -p` (optional; defaults to `ssh` or `plink`). |
 | `batchMode`    | Add non-interactive flags so runs fail fast (optional, default `true`). |
 
 > `config.json` and `lastrun.json` are git-ignored because they contain
@@ -127,5 +134,6 @@ Put `config.json` in the same directory as the jar, then:
 java -jar scp-util.jar
 ```
 
-A small window opens with a **Sync Now** button and an activity log. Click it to
-copy everything modified since the last run.
+A small window opens with a **Sync Now** button, a **Route** toggle (OpenSSH /
+PuTTY), and an activity log. Pick the route, then click the button to copy
+everything modified since the last successful sync.

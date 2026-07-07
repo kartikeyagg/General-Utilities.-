@@ -1,10 +1,12 @@
 package com.scputil;
 
 import javax.swing.BorderFactory;
+import javax.swing.ButtonGroup;
 import javax.swing.JButton;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JRadioButton;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.SwingUtilities;
@@ -13,6 +15,7 @@ import javax.swing.UIManager;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
+import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.Insets;
 import java.net.URISyntaxException;
@@ -22,9 +25,11 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 
 /**
- * Minimalist Swing front-end. A single button triggers a sync: it scans the
- * configured local folder for files modified since the last run and copies them
- * to the mirror folder on the remote Ubuntu host over SCP.
+ * Minimalist Swing front-end. A button triggers a sync: it scans the configured
+ * local folder for files modified since the last run and copies them to the
+ * mirror folder on the remote Ubuntu host over SCP. A route toggle lets the user
+ * choose the OpenSSH ({@code scp}) or PuTTY ({@code pscp}) transport at runtime;
+ * it is seeded from {@code config.json} and overrides the config's {@code mode}.
  *
  * <p>{@code config.json} and {@code lastrun.json} both live in the same
  * directory as the running program (the jar's directory, falling back to the
@@ -41,6 +46,8 @@ public class ScpSyncApp {
     private final Path appDir;
     private final JFrame frame;
     private final JButton syncButton;
+    private final JRadioButton opensshRadio;
+    private final JRadioButton puttyRadio;
     private final JLabel statusLabel;
     private final JTextArea logArea;
 
@@ -55,16 +62,39 @@ public class ScpSyncApp {
         root.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
         root.setBackground(Color.WHITE);
 
-        // --- Top: the single, minimalist action button ---
+        // --- Top: the minimalist action button plus the transport route toggle ---
         syncButton = new JButton("Sync Now");
         syncButton.setFont(syncButton.getFont().deriveFont(Font.BOLD, 15f));
         syncButton.setFocusPainted(false);
         syncButton.setMargin(new Insets(10, 24, 10, 24));
         syncButton.addActionListener(e -> runSync());
 
+        opensshRadio = new JRadioButton("OpenSSH (scp)");
+        puttyRadio = new JRadioButton("PuTTY (pscp)");
+        opensshRadio.setBackground(Color.WHITE);
+        puttyRadio.setBackground(Color.WHITE);
+        ButtonGroup routeGroup = new ButtonGroup();
+        routeGroup.add(opensshRadio);
+        routeGroup.add(puttyRadio);
+        // Seed the selected route from config.json; default to OpenSSH if unreadable.
+        if (initialModeFromConfig() == Config.Mode.PUTTY) {
+            puttyRadio.setSelected(true);
+        } else {
+            opensshRadio.setSelected(true);
+        }
+
+        JPanel routePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        routePanel.setBackground(Color.WHITE);
+        JLabel routeLabel = new JLabel("Route:");
+        routeLabel.setForeground(new Color(0x55, 0x55, 0x55));
+        routePanel.add(routeLabel);
+        routePanel.add(opensshRadio);
+        routePanel.add(puttyRadio);
+
         JPanel top = new JPanel(new BorderLayout());
         top.setBackground(Color.WHITE);
         top.add(syncButton, BorderLayout.WEST);
+        top.add(routePanel, BorderLayout.EAST);
         root.add(top, BorderLayout.NORTH);
 
         // --- Center: activity log ---
@@ -103,6 +133,9 @@ public class ScpSyncApp {
         // on the next run rather than being silently skipped.
         final long runStart = System.currentTimeMillis();
 
+        // Read the route toggle here, on the EDT, before going off-thread.
+        final Config.Mode route = puttyRadio.isSelected() ? Config.Mode.PUTTY : Config.Mode.OPENSSH;
+
         new SwingWorker<FileSyncService.Result, String>() {
             private String error;
 
@@ -110,9 +143,12 @@ public class ScpSyncApp {
             protected FileSyncService.Result doInBackground() {
                 try {
                     Config config = Config.load(appDir.resolve(CONFIG_FILE));
+                    // The in-window toggle wins over config.json's mode.
+                    config.mode = (route == Config.Mode.PUTTY) ? "putty" : "openssh";
                     SyncState state = SyncState.load(appDir.resolve(STATE_FILE));
 
-                    publish("--- Sync started at " + TS.format(Instant.ofEpochMilli(runStart)) + " ---");
+                    publish("--- Sync started at " + TS.format(Instant.ofEpochMilli(runStart))
+                            + " via " + route + " (" + config.resolvedScpCommand() + ") ---");
                     if (state.lastRunEpochMillis == 0) {
                         publish("No previous run recorded; copying all files.");
                     } else {
@@ -180,6 +216,18 @@ public class ScpSyncApp {
 
     private void setStatus(String message) {
         SwingUtilities.invokeLater(() -> statusLabel.setText(message));
+    }
+
+    /**
+     * Best-effort read of the route from {@code config.json} to seed the toggle
+     * at startup. Any problem (missing/invalid config) falls back to OpenSSH.
+     */
+    private Config.Mode initialModeFromConfig() {
+        try {
+            return Config.load(appDir.resolve(CONFIG_FILE)).effectiveMode();
+        } catch (Exception e) {
+            return Config.Mode.OPENSSH;
+        }
     }
 
     /** Directory containing the running jar; falls back to the working directory. */

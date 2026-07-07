@@ -17,10 +17,15 @@ import java.util.stream.Stream;
  * file modified since the last run, and copies each one to the mirror location
  * on the remote Ubuntu host over SCP.
  *
- * <p>SCP with a password is driven by shelling out to an external tool. On the
- * target Windows machine this defaults to PuTTY's {@code pscp}/{@code plink},
- * which accept the password with {@code -pw} on the command line. Both tools
- * are configurable in {@code config.json}.</p>
+ * <p>The remote host is never inspected or modified apart from the file copy
+ * itself &mdash; there are no {@code mkdir}, status or listing commands. The
+ * tool knows only the target folder path, so the remote mirror folder tree must
+ * already exist; a file whose remote sub-folder is missing simply fails and is
+ * retried on the next run.</p>
+ *
+ * <p>The copy is driven by shelling out to an external tool: the system
+ * {@code scp} (OpenSSH route) or PuTTY's {@code pscp} (PuTTY route, password via
+ * {@code -pw}). The route is chosen in {@code config.json} or at runtime.</p>
  */
 public class FileSyncService {
 
@@ -73,20 +78,15 @@ public class FileSyncService {
 
         log.accept(modified.size() + " modified file(s) to copy:");
 
-        // Remote parent directories are created up-front so scp never fails on a
-        // missing sub-directory. Track the ones we've already made this run.
-        List<String> createdDirs = new ArrayList<>();
-
+        // The remote is never inspected or modified apart from the copy itself,
+        // so the destination folder tree must already exist on the remote. A
+        // file whose remote sub-folder is missing simply fails and is retried
+        // on the next run.
         for (Path file : modified) {
             Path relative = localRoot.relativize(file);
             String remotePath = toRemotePath(relative);
-            String remoteDir = remoteParent(remotePath);
 
             try {
-                if (!createdDirs.contains(remoteDir)) {
-                    ensureRemoteDir(remoteDir);
-                    createdDirs.add(remoteDir);
-                }
                 copyFile(file, remotePath);
                 result.transferred++;
                 log.accept("  [ok] " + relative);
@@ -106,11 +106,6 @@ public class FileSyncService {
         return base + "/" + rel;
     }
 
-    private static String remoteParent(String remotePath) {
-        int idx = remotePath.lastIndexOf('/');
-        return idx > 0 ? remotePath.substring(0, idx) : remotePath;
-    }
-
     private static String stripTrailingSlash(String s) {
         String t = s.trim();
         while (t.endsWith("/")) {
@@ -119,25 +114,10 @@ public class FileSyncService {
         return t;
     }
 
-    /** Runs {@code mkdir -p <dir>} on the remote host so scp has a destination. */
-    private void ensureRemoteDir(String remoteDir) throws IOException, InterruptedException {
-        List<String> cmd = new ArrayList<>();
-        cmd.add(config.sshCommand);
-        // Port flag: ssh uses lowercase -p; pscp/plink use uppercase -P.
-        if (config.port > 0) {
-            cmd.add(config.effectiveMode() == Config.Mode.OPENSSH ? "-p" : "-P");
-            cmd.add(String.valueOf(config.port));
-        }
-        addAuthAndBatchFlags(cmd);
-        cmd.add(config.remoteTarget());
-        cmd.add("mkdir -p '" + remoteDir + "'");
-        exec(cmd, "create remote directory " + remoteDir);
-    }
-
     /** Copies a single local file to the given remote path via scp. */
     private void copyFile(Path localFile, String remotePath) throws IOException, InterruptedException {
         List<String> cmd = new ArrayList<>();
-        cmd.add(config.scpCommand);
+        cmd.add(config.resolvedScpCommand());
         // Both scp and pscp use uppercase -P for the port.
         if (config.port > 0) {
             cmd.add("-P");
