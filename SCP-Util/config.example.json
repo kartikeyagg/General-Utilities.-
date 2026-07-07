@@ -1,0 +1,10 @@
+{
+  "localFolder": "C:\\Users\\me\\Dir1",
+  "mirrorFolder": "/home/ubuntu/Dir1",
+  "remoteIp": "192.168.1.100",
+  "username": "ubuntu",
+  "password": "your-password-here",
+  "port": 22,
+  "scpCommand": "pscp",
+  "sshCommand": "plink"
+}
