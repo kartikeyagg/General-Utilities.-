@@ -123,12 +123,13 @@ public class FileSyncService {
     private void ensureRemoteDir(String remoteDir) throws IOException, InterruptedException {
         List<String> cmd = new ArrayList<>();
         cmd.add(config.sshCommand);
-        cmd.add("-P");
-        cmd.add(String.valueOf(config.port));
-        cmd.add("-pw");
-        cmd.add(config.password);
-        cmd.add("-batch"); // never prompt interactively
-        cmd.add(config.username + "@" + config.remoteIp);
+        // Port flag: ssh uses lowercase -p; pscp/plink use uppercase -P.
+        if (config.port > 0) {
+            cmd.add(config.effectiveMode() == Config.Mode.OPENSSH ? "-p" : "-P");
+            cmd.add(String.valueOf(config.port));
+        }
+        addAuthAndBatchFlags(cmd);
+        cmd.add(config.remoteTarget());
         cmd.add("mkdir -p '" + remoteDir + "'");
         exec(cmd, "create remote directory " + remoteDir);
     }
@@ -137,14 +138,36 @@ public class FileSyncService {
     private void copyFile(Path localFile, String remotePath) throws IOException, InterruptedException {
         List<String> cmd = new ArrayList<>();
         cmd.add(config.scpCommand);
-        cmd.add("-P");
-        cmd.add(String.valueOf(config.port));
-        cmd.add("-pw");
-        cmd.add(config.password);
-        cmd.add("-batch");
+        // Both scp and pscp use uppercase -P for the port.
+        if (config.port > 0) {
+            cmd.add("-P");
+            cmd.add(String.valueOf(config.port));
+        }
+        addAuthAndBatchFlags(cmd);
         cmd.add(localFile.toString());
-        cmd.add(config.username + "@" + config.remoteIp + ":" + remotePath);
+        cmd.add(config.remoteTarget() + ":" + remotePath);
         exec(cmd, "copy " + localFile.getFileName());
+    }
+
+    /**
+     * Appends the transport-specific auth and non-interactive flags.
+     * OpenSSH relies on key auth (no password on the command line) and uses
+     * {@code -o BatchMode=yes}; PuTTY takes the password via {@code -pw} and
+     * uses {@code -batch}.
+     */
+    private void addAuthAndBatchFlags(List<String> cmd) {
+        if (config.effectiveMode() == Config.Mode.OPENSSH) {
+            if (config.useBatchMode()) {
+                cmd.add("-o");
+                cmd.add("BatchMode=yes");
+            }
+        } else {
+            cmd.add("-pw");
+            cmd.add(config.password);
+            if (config.useBatchMode()) {
+                cmd.add("-batch");
+            }
+        }
     }
 
     /** Runs an external command and throws with captured output on non-zero exit. */

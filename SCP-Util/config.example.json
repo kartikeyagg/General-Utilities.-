@@ -1,10 +1,18 @@
 {
+  "_comment_openssh": "Use this style if you connect with 'ssh <alias>' / 'scp <alias>:...' (OpenSSH + ~/.ssh/config, key-based auth). remoteHost is your alias exactly as you type it.",
   "localFolder": "C:\\Users\\me\\Dir1",
   "mirrorFolder": "/home/ubuntu/Dir1",
-  "remoteIp": "192.168.1.100",
-  "username": "ubuntu",
-  "password": "your-password-here",
-  "port": 22,
-  "scpCommand": "pscp",
-  "sshCommand": "plink"
+  "remoteHost": "myserver",
+
+  "_comment_putty": "Alternative: leave remoteHost empty and fill these to use PuTTY pscp/plink with a password.",
+  "remoteIp": "",
+  "username": "",
+  "password": "",
+
+  "_comment_optional": "port=0 means 'let ssh/alias decide'. mode can force 'openssh' or 'putty'. scpCommand/sshCommand default to scp/ssh (openssh) or pscp/plink (putty).",
+  "port": 0,
+  "mode": "",
+  "scpCommand": "",
+  "sshCommand": "",
+  "batchMode": true
 }

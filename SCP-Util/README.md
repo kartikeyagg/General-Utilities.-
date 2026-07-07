@@ -42,18 +42,43 @@ local and remote folders share the same name (e.g. `...\Dir1` ->
 ## The SCP transport
 
 Java has no built-in SCP and (per the spec) Gson is the only library, so the
-tool shells out to an external SCP program that accepts a password on the
-command line. On Windows the standard choice is **PuTTY's `pscp` and `plink`**
-(both take `-pw <password>`). Install PuTTY and make sure `pscp` and `plink`
-are on your `PATH`.
+tool shells out to the system `ssh`/`scp` (or PuTTY) to do the transfer. There
+are two modes; the mode is inferred from your config (or forced with `mode`).
 
-The executable names are configurable in `config.json` (`scpCommand` /
-`sshCommand`) if you prefer different tools (e.g. `sshpass`-wrapped `scp`).
+### Mode 1 — OpenSSH with a host alias (recommended)
 
-## Configuration
+If you already connect with `ssh <alias>` and `scp <alias>:...` (i.e. you have a
+`Host` entry in `~/.ssh/config` — usually `.ssh\config` on Windows — with
+key-based auth), just set **`remoteHost`** to that alias. The tool then runs the
+built-in `ssh`/`scp` exactly the way you do, using your existing keys. **No
+password is placed on the command line.**
 
-Copy `config.example.json` to `config.json` (in the same directory as the jar)
-and fill it in:
+```json
+{
+  "localFolder": "C:\\Users\\me\\Dir1",
+  "mirrorFolder": "/home/ubuntu/Dir1",
+  "remoteHost": "myserver"
+}
+```
+
+This resolves to commands like:
+
+```
+ssh -o BatchMode=yes myserver "mkdir -p '/home/ubuntu/Dir1/sub'"
+scp -o BatchMode=yes C:\...\file.txt myserver:/home/ubuntu/Dir1/sub/file.txt
+```
+
+Requirements: Windows 10/11 built-in OpenSSH (`where ssh` / `where scp`), and the
+alias must authenticate **without an interactive prompt** (key auth), because a
+GUI app can't type a password. `BatchMode=yes` makes it fail fast if keys aren't
+set up rather than hang.
+
+### Mode 2 — PuTTY with a password
+
+Leave `remoteHost` empty and provide `remoteIp` + `username` + `password`. The
+tool uses PuTTY's `pscp`/`plink` with `-pw`. Install PuTTY and make sure `pscp`
+and `plink` are on your `PATH`. First connect once interactively so the host key
+is cached (batch mode won't accept a new host key).
 
 ```json
 {
@@ -61,23 +86,27 @@ and fill it in:
   "mirrorFolder": "/home/ubuntu/Dir1",
   "remoteIp": "192.168.1.100",
   "username": "ubuntu",
-  "password": "your-password-here",
-  "port": 22,
-  "scpCommand": "pscp",
-  "sshCommand": "plink"
+  "password": "your-password-here"
 }
 ```
 
-| Field          | Meaning                                                        |
-| -------------- | ------------------------------------------------------------- |
-| `localFolder`  | Windows path of the folder to watch (`Dir1`).                 |
-| `mirrorFolder` | Remote Ubuntu path of the mirror folder (same folder name).  |
-| `remoteIp`     | Remote host IP or hostname.                                   |
-| `username`     | SSH username on the remote host.                             |
-| `password`     | SSH password on the remote host.                             |
-| `port`         | SSH port (optional, defaults to `22`).                       |
-| `scpCommand`   | SCP executable (optional, defaults to `pscp`).               |
-| `sshCommand`   | SSH executable used for `mkdir -p` (optional, default `plink`). |
+## Configuration reference
+
+Copy `config.example.json` to `config.json` (same directory as the jar).
+
+| Field          | Meaning                                                                 |
+| -------------- | ----------------------------------------------------------------------- |
+| `localFolder`  | Windows path of the folder to watch (`Dir1`).                          |
+| `mirrorFolder` | Remote Ubuntu path of the mirror folder (same folder name).           |
+| `remoteHost`   | SSH alias (Mode 1). When set, `remoteIp`/`username`/`password` are ignored. |
+| `remoteIp`     | Remote host IP/hostname (Mode 2).                                       |
+| `username`     | SSH username (Mode 2).                                                  |
+| `password`     | SSH password (Mode 2 only).                                             |
+| `port`         | SSH port. `0`/omitted = let ssh / the alias config decide.             |
+| `mode`         | Force `"openssh"` or `"putty"` (optional; otherwise inferred).          |
+| `scpCommand`   | SCP executable (optional; defaults to `scp` or `pscp`).               |
+| `sshCommand`   | SSH executable for `mkdir -p` (optional; defaults to `ssh` or `plink`). |
+| `batchMode`    | Add non-interactive flags so runs fail fast (optional, default `true`). |
 
 > `config.json` and `lastrun.json` are git-ignored because they contain
 > credentials / machine-specific state.
