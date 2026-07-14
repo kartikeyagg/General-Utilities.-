@@ -1,0 +1,5 @@
+target/
+config.json
+lastrun.json
+
+dependency-reduced-pom.xml
